@@ -1,0 +1,4 @@
+---
+RulesToSuppress:
+- id: W89
+  reason: We do not want to deploy all lambdas in a VPC, only when required

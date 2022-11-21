@@ -1,0 +1,96 @@
+---
+# See https://pre-commit.com for more information
+default_language_version:
+  python: python3.9
+default_stages:
+- commit
+- push
+fail_fast: false
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v3.4.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-yaml
+    exclude: template.yaml
+  - id: check-json
+  - id: check-case-conflict
+  - id: check-merge-conflict
+  - id: check-executables-have-shebangs
+  - id: check-added-large-files
+  - id: check-docstring-first
+  - id: check-symlinks
+  - id: debug-statements
+  - id: detect-aws-credentials
+    args:
+    - --allow-missing-credentials
+  - id: detect-private-key
+  - id: no-commit-to-branch
+    name: no-commit-to-master
+    args:
+    - --branch
+    - master
+  - id: no-commit-to-branch
+    name: no-commit-to-main
+    args:
+    - --branch
+    - main
+  - id: mixed-line-ending
+    args: [--fix=lf]
+  - id: requirements-txt-fixer
+- repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
+  rev: 0.2.1
+  hooks:
+  - id: yamlfmt
+    args: [--mapping, '2', --sequence, '2', --offset, '0', --width, '150']
+- repo: https://github.com/PyCQA/flake8
+  rev: 4.0.1
+  hooks:
+  - id: flake8
+    additional_dependencies:
+    - mccabe==0.6.0
+- repo: https://github.com/jorisroovers/gitlint
+  rev: v0.15.1
+  hooks:
+  - id: gitlint
+    stages: [commit-msg]
+- repo: https://github.com/asottile/add-trailing-comma
+  rev: v2.1.0
+  hooks:
+  - id: add-trailing-comma
+- repo: https://github.com/pycqa/isort
+  rev: 5.10.1
+  hooks:
+  - id: isort
+    name: isort (python)
+- repo: https://github.com/psf/black
+  rev: 22.3.0
+  hooks:
+  - id: black
+    language_version: python3.9
+- repo: https://github.com/pycqa/pydocstyle
+  rev: 6.1.1
+  hooks:
+  - id: pydocstyle
+    additional_dependencies:
+    - toml
+- repo: https://github.com/pycqa/bandit
+  rev: 1.7.4
+  hooks:
+  - id: bandit
+    name: bandit (python)
+    args:
+    - -s
+    - B101
+- repo: https://github.com/awslabs/cfn-python-lint
+  rev: v0.61.0
+  hooks:
+  - id: cfn-python-lint
+    files: template.yaml$
+- repo: https://github.com/stelligent/cfn_nag
+  rev: v0.8.9
+  hooks:
+  - id: cfn-nag
+    files: template.yaml$
+    entry: cfn_nag_scan -b .cfn_nag_ignore.yaml --fail-on-warnings -i . -t template.yaml

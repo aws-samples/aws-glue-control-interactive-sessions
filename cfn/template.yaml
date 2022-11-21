@@ -1,0 +1,281 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: GlueInteractive Session Control Stack
+
+Parameters:
+  NotificationEmailAddress:
+    Description: Notification email address, if not provided notifications via emails will not be in place
+    Type: String
+  EnforceVPCConnection:
+    Description: Whether to enforce the vpc connection on the interactive session (true or false)
+    Type: String
+  MaxWorkers:
+    Description: Maximm number of workers that can be configured in an interactive session
+    Type: String
+  MaxIdleTimeoutMinutes:
+    Description: Maximum idle timeout in minutes that can be configured in an interactive session
+    Type: String
+
+Globals:
+  Function:
+    CodeUri: ../src/functions/handlers
+    Layers:
+    - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:15
+    MemorySize: 256
+    Runtime: python3.9
+    Tracing: Active
+
+Conditions:
+  CreateNotificationResources: !Not [!Equals [!Ref NotificationEmailAddress, '']]
+
+Resources:
+  GlueInterControlKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS Key to be used by GlueInteractive Session Control
+      Enabled: true
+      EnableKeyRotation: true
+      KeyUsage: ENCRYPT_DECRYPT
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: AccessControlKmsKeyPolicy
+        Statement:
+        - Sid: Enable IAM User Permissions
+          Effect: Allow
+          Principal:
+            AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+          Action: kms:*
+          Resource: '*'
+        - Sid: Allow AWS services to encrpyt/decrypt KMS CMK
+          Effect: Allow
+          Principal:
+            Service:
+            - sns.amazonaws.com
+            - sqs.amazonaws.com
+          Action:
+          - kms:GenerateDataKey*
+          - kms:Decrypt
+          Resource: '*'
+        - Sid: Allow Roles to encrpyt/decrypt KMS CMK
+          Effect: Allow
+          Principal:
+            AWS:
+            - !GetAtt InteractiveSessionControlLambdaRole.Arn
+          Action:
+          - kms:GenerateDataKey*
+          - kms:Decrypt
+          Resource: '*'
+  GlueInterControlKMSKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/glue-interactive-control-key
+      TargetKeyId: !Ref GlueInterControlKMSKey
+
+  ################ Glue Interactive Session ################
+
+  SNSEmailTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateNotificationResources
+    Properties:
+      DisplayName: glue interactive session user notification
+      KmsMasterKeyId: !Ref GlueInterControlKMSKey
+      Subscription:
+      - Endpoint: !Ref NotificationEmailAddress
+        Protocol: email
+
+  SNSEmailTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Condition: CreateNotificationResources
+    Properties:
+      PolicyDocument:
+        Id: GlueControlLambda
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AllowLambdaPublish
+          Effect: Allow
+          Principal:
+            AWS: !GetAtt InteractiveSessionControlLambdaRole.Arn
+          Action: sns:Publish
+          Resource: !Ref SNSEmailTopic
+      Topics:
+      - !Ref SNSEmailTopic
+
+  InteractiveSessionControlLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Inspect creation of glue interactive sessions
+      Role: !GetAtt InteractiveSessionControlLambdaRole.Arn
+      Handler: main.lambda_handler
+      Timeout: 120 # need to wait for glue session to be started in order to terminate
+      ReservedConcurrentExecutions: 5
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt InteractiveSessionLambdaControlDLQ.Arn
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: glue-interactive-control
+          POWERTOOLS_METRICS_NAMESPACE: glue-interactive-control
+          EMAIL_SNS_ARN: !If [CreateNotificationResources, !Ref SNSEmailTopic, '']
+          ENFORCE_VPC_CONNECTION: !Ref EnforceVPCConnection
+          MAX_WORKERS: !Ref MaxWorkers
+          MAX_IDLE_TIMEOUT_MINUTES: !Ref MaxIdleTimeoutMinutes
+
+  InteractiveSessionLambdaControlDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      DelaySeconds: 0
+      KmsMasterKeyId: !Ref GlueInterControlKMSKey
+      MessageRetentionPeriod: 1209600 #14 days in seconds
+      ReceiveMessageWaitTimeSeconds: 0
+
+  InteractiveSessionLambdaControlDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - !Ref InteractiveSessionLambdaControlDLQ
+      PolicyDocument:
+        Statement:
+        - Action:
+          - SQS:SendMessage
+          Effect: Allow
+          Resource: !GetAtt InteractiveSessionLambdaControlDLQ.Arn
+          Principal:
+            AWS: !GetAtt InteractiveSessionControlLambdaRole.Arn
+
+  InteractiveSessionControlRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-interactive-session-control
+      Description: Control service to analyse glue interactive sessions
+      EventBusName: default
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - glue.amazonaws.com
+          eventName:
+          - CreateSession
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt InteractiveSessionControlLambda.Arn
+        Id: InteractiveSessionControlLambda
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 600
+          MaximumRetryAttempts: 100
+        DeadLetterConfig:
+          Arn: !GetAtt InteractiveSessionControlDLQ.Arn
+
+  InteractiveSessionControlDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      DelaySeconds: 0
+      KmsMasterKeyId: !Ref GlueInterControlKMSKey
+      MessageRetentionPeriod: 1209600 #14 days in seconds
+      ReceiveMessageWaitTimeSeconds: 0
+
+  InteractiveSessionControlDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+      - !Ref InteractiveSessionControlDLQ
+      PolicyDocument:
+        Statement:
+        - Action:
+          - sqs:*
+          Effect: Deny
+          Resource: !GetAtt InteractiveSessionControlDLQ.Arn
+          Principal: '*'
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+
+  InteractiveSessionControlLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      - arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess
+      MaxSessionDuration: 3600
+
+  InteractiveSessionControlLambdaRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for glue interactive session control lambda
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - glue:DeleteSession
+          - glue:StopSession
+          - glue:GetSession
+          Resource:
+          - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:session/*
+        - Sid: AllowEventsOperations
+          Effect: Allow
+          Action:
+          - sns:Publish
+          Resource:
+          - Fn::Sub: arn:aws:sns:${AWS::Region}:${AWS::AccountId}:*
+        - Sid: AllowSQSDLQ
+          Effect: Allow
+          Action:
+          - sqs:SendMessage
+          Resource: !GetAtt InteractiveSessionLambdaControlDLQ.Arn
+      Roles:
+      - !Ref InteractiveSessionControlLambdaRole
+
+  InteractiveSessionControlLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt InteractiveSessionControlLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt InteractiveSessionControlRule.Arn
+
+  InteractiveSessionControlDLQAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Glue Interactive Control Service is failing to audit glue interactive sessions
+      Namespace: AWS/SQS
+      Dimensions:
+      - Name: QueueName
+        Value: !Ref InteractiveSessionControlDLQ
+      MetricName: NumberOfMessagesSent
+      Statistic: Sum
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Threshold: 600
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Period: 900
+
+  InteractiveSessionControlLambdaExceptionAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Glue Interactive Session Control Failed to audit glue interactive sessions
+      ActionsEnabled: true
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Dimensions:
+      - Name: FunctionName
+        Value: !Ref InteractiveSessionControlLambda
+      Period: 600
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching

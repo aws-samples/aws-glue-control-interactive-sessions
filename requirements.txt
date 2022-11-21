@@ -1,0 +1,10 @@
+aws-lambda-powertools[tracer,validation,parser]~=2.1.0
+
+bandit~=1.7.0
+black~=22.10.0
+boto3~=1.26.4
+flake8~=5.0.4
+
+pre-commit~=2.20.0
+pytest~=7.1.2
+pytest-cov~=4.0.0
