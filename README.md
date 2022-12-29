@@ -70,15 +70,14 @@ To facilitate deployment lifecycle, included the setup of the user local environ
 
 1. **Ensure** to have AWS credential renewed and access to your account.<br>How to do that is documented [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
 2. **Explore** the `Makefile` and adapt to your needs the AWS Region and the Stack name by modifying the variables `AWS_REGION` and `STACK_NAME`.
-3. **Set** a value for `KILL_SESSION = "True"` if you want to terminate immediately the Glue Interactive Session which has been found out of boundaries. <br>
-Allowed values: `"True"||"False"`, default to `"True"`
-1. **Set** a value for `NOTIFICATION_EMAIL_ADDRESS = <your.email@provider.com>` in the `Makefile` if you want get notified when a session has been found out of boundaries.
-2. **Install** all the prerequisites libraries:
+3. **Set** a value for `KILL_SESSION = "True"` if you want to terminate immediately the Glue Interactive    Session which has been found out of boundaries.<br>Allowed values: `"True"||"False"`, default to `"True"`
+4. **Set** a value for `NOTIFICATION_EMAIL_ADDRESS = <your.email@provider.com>` in the `Makefile` if you want get notified when a session has been found out of boundaries.
+5. **Install** all the prerequisites libraries:
     ```shell
     make install-pre-requisites
     ```
     These will be installed under a newly created python virtual environment inside this repository in the directory `.venv`
-3. **Deploy** the new stack
+6. **Deploy** the new stack
     ```shell
     make deploy
     ```
