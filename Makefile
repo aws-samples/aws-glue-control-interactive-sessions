@@ -7,7 +7,7 @@ NOTIFICATION_EMAIL_ADDRESS = "foo.bar@provider.com"
 ENFORCE_VPC_CONNECTION = "false"
 MAX_WORKERS = "15"
 MAX_IDLE_TIMEOUT_MINUTES = "300"
-KILL_SESSION = "False"
+KILL_SESSION = "True"
 
 
 pre-flight-checks:
