@@ -19,7 +19,7 @@ The proposed architecture is built on serverless components and is executed even
 2. Glue Interactive Session will produce a new event toAWS [CloudTrail](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html) for the CreateSession event with all relevant information to identify and inspect a session as soon as the session is initiated.
 3. An Amazon EventBridge rule filters the CloudTrail events and invokes the AWS Lambda function to inspect the CreateSession event.
 4. The Interactive Session Inspection function will inspect the CreateSession event and will check for all defined boundary conditions. Currently, the solution supports configuration for the *maximum number of workers*, *idle timeout* in minutes and *deployment with* *connection* enforced.
-5. If any of the defined boundary conditions are not met, for example too many workers are provisioned for the session, the function will terminate the Glue Interactive Session immediately. In case the session is not started yet, the function will wait for it to start before terminating.
+5. If any of the defined boundary conditions are not met, for example too many workers are provisioned for the session, depending on the provided configuration the function will terminate the Glue Interactive Session immediately, will send an email via [Amazon Simple Notification Service](https://aws.amazon.com/sns/) or both. In case the session is not started yet, the function will wait for it to start before terminating.
 6. In case the session was terminated, an e-mail is sent to an [Amazon Simple Notification Service](https://aws.amazon.com/sns/) topic. There is no information available in the Glue Interactive Session notebook on the reason for the termination of the session. Therefore, through the SNS topic additional context information is provided to the data engineers.
 7. In case the function fails, the sessions are logged in a [dead letter queue](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html) inside [Amazon Simple Queue]Service (https://aws.amazon.com/sqs/). Furthermore, the queue is monitored and in case of a message it will trigger an [Amazon CloudWatch](https://aws.amazon.com/cloudwatch/) alarm.
 
@@ -70,13 +70,15 @@ To facilitate deployment lifecycle, included the setup of the user local environ
 
 1. **Ensure** to have AWS credential renewed and access to your account.<br>How to do that is documented [here](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
 2. **Explore** the `Makefile` and adapt to your needs the AWS Region and the Stack name by modifying the variables `AWS_REGION` and `STACK_NAME`.
-3. **Set** a value for `NOTIFICATION_EMAIL_ADDRESS = <your.email@provider.com>` in the `Makefile` if you want get notified when a glue session gets terminated.
-4. **Install** all the prerequisites libraries:
+3. **Set** a value for `KILL_SESSION = "True"` if you want to terminate immediately the Glue Interactive Session which has been found out of boundaries. <br>
+Allowed values: `"True"||"False"`, default to `"True"`
+1. **Set** a value for `NOTIFICATION_EMAIL_ADDRESS = <your.email@provider.com>` in the `Makefile` if you want get notified when a session has been found out of boundaries.
+2. **Install** all the prerequisites libraries:
     ```shell
     make install-pre-requisites
     ```
     These will be installed under a newly created python virtual environment inside this repository in the directory `.venv`
-5. **Deploy** the new stack
+3. **Deploy** the new stack
     ```shell
     make deploy
     ```

@@ -7,6 +7,7 @@ NOTIFICATION_EMAIL_ADDRESS = "foo.bar@provider.com"
 ENFORCE_VPC_CONNECTION = "false"
 MAX_WORKERS = "15"
 MAX_IDLE_TIMEOUT_MINUTES = "300"
+KILL_SESSION = "False"
 
 
 pre-flight-checks:
@@ -36,7 +37,7 @@ deploy: build
 		--stack-name ${STACK_NAME} \
 		--resolve-s3 \
 		--region ${AWS_REGION} \
-		--parameter-overrides ParameterKey=NotificationEmailAddress,ParameterValue=${NOTIFICATION_EMAIL_ADDRESS} ParameterKey=EnforceVPCConnection,ParameterValue=${ENFORCE_VPC_CONNECTION} ParameterKey=MaxWorkers,ParameterValue=${MAX_WORKERS} ParameterKey=MaxIdleTimeoutMinutes,ParameterValue=${MAX_IDLE_TIMEOUT_MINUTES}
+		--parameter-overrides ParameterKey=NotificationEmailAddress,ParameterValue=${NOTIFICATION_EMAIL_ADDRESS} ParameterKey=EnforceVPCConnection,ParameterValue=${ENFORCE_VPC_CONNECTION} ParameterKey=MaxWorkers,ParameterValue=${MAX_WORKERS} ParameterKey=MaxIdleTimeoutMinutes,ParameterValue=${MAX_IDLE_TIMEOUT_MINUTES} ParameterKey=KillSession,ParameterValue=${KILL_SESSION}
 
 clean-up:
 	. .venv/bin/activate

@@ -16,6 +16,13 @@ Parameters:
   MaxIdleTimeoutMinutes:
     Description: Maximum idle timeout in minutes that can be configured in an interactive session
     Type: String
+  KillSession:
+    Description: Automatically kill the session if discovered out of boundaries
+    AllowedValues:
+    - 'True'
+    - 'False'
+    Type: String
+    Default: 'True'
 
 Globals:
   Function:
@@ -121,6 +128,7 @@ Resources:
           ENFORCE_VPC_CONNECTION: !Ref EnforceVPCConnection
           MAX_WORKERS: !Ref MaxWorkers
           MAX_IDLE_TIMEOUT_MINUTES: !Ref MaxIdleTimeoutMinutes
+          KILL_SESSION: !Ref KillSession
 
   InteractiveSessionLambdaControlDLQ:
     Type: AWS::SQS::Queue

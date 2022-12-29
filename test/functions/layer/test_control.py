@@ -131,6 +131,29 @@ class TestInteractiveSessionControl:
         assert boto3_mock.client("glue").delete_session.called
         assert not boto3_mock.client("sns").publish.called
 
+    def test_kill_session_not_true_should_not_be_terminated(
+        self,
+        boto3_mock,
+        event: EventBridgeEvent,
+        monkeypatch: Any,
+    ):
+        """Tests session is killed even if no sns topic is configured."""
+        detail = event.detail
+        del detail["responseElements"]["session"]["connections"]
+        event = EventBridgeEvent({"detail": detail})
+        boto3_mock.client("glue").get_session.return_value = {
+            "Session": {"Status": "ACTIVE"},
+        }
+        monkeypatch.setenv("KILL_SESSION", "False")
+        controller = InteractiveSessionControl(
+            self.VPC,
+            self.WORKERS,
+            self.IDLE_TIMEOUT,
+        )
+        controller.inspect(event)
+        assert not boto3_mock.client("glue").delete_session.called
+        assert boto3_mock.client("sns").publish.called
+
     def test_invalid_principal_id_should_terminate(
         self,
         boto3_mock,
