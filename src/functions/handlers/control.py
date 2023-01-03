@@ -47,6 +47,7 @@ class InteractiveSessionControl:
             "glue",
             region_name=REGION,
         )
+        self.KILL_SESSION = os.getenv("KILL_SESSION", "True")
         self.EMAIL_SNS_ARN = os.getenv("EMAIL_SNS_ARN")
 
     def has_connection_attached(self, event: EventBridgeEvent) -> bool:
@@ -161,9 +162,12 @@ class InteractiveSessionControl:
             controls_failed = True
 
         if controls_failed:
-            self.terminate_session(session_id)
-            logger.info(f"session terminated `{session_id}`")
-
             if self.EMAIL_SNS_ARN:
                 logger.info("sending email")
                 self.send_user_notification(principal_id, session_id, workers, idle_timeout)
+
+            if self.KILL_SESSION == "True":
+                self.terminate_session(session_id)
+                logger.info(f"session terminated `{session_id}`")
+            else:
+                logger.debug(f"Skip terminating session `{session_id}`")
